@@ -1,0 +1,22 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: ms-priorizacao
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/infra_urbana_priorizacao
+    username: admin
+    password: password123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+ms-geo:
+  url: http://localhost:8085
