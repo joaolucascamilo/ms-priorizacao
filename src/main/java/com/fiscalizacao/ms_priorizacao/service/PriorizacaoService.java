@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -37,10 +36,6 @@ public class PriorizacaoService {
         int pontosTempo = calcularPontosPorTempo(dto.getDataCriacao());
         score += pontosTempo;
         justificativa.append("Tempo sem solução: +").append(pontosTempo).append("pts. ");
-
-        int pontosProximidade = calcularPontosPorProximidade(dto.getLatitude(), dto.getLongitude());
-        score += pontosProximidade;
-        justificativa.append("Proximidade de escola/hospital: +").append(pontosProximidade).append("pts.");
 
         NivelPrioridade nivel = NivelPrioridade.fromScore(score);
 
@@ -79,10 +74,6 @@ public class PriorizacaoService {
         int pontosTempo = calcularPontosPorTempo(dto.getDataCriacao());
         score += pontosTempo;
         justificativa.append("Tempo sem solução: +").append(pontosTempo).append("pts. ");
-
-        int pontosProximidade = calcularPontosPorProximidade(dto.getLatitude(), dto.getLongitude());
-        score += pontosProximidade;
-        justificativa.append("Proximidade de escola/hospital: +").append(pontosProximidade).append("pts.");
 
         NivelPrioridade novoNivel = NivelPrioridade.fromScore(score);
 
@@ -141,36 +132,4 @@ public class PriorizacaoService {
         return 0;
     }
 
-    private int calcularPontosPorProximidade(Double lat, Double lng) {
-        if (lat == null || lng == null) return 0;
-
-        // Lista de locais críticos (escolas/hospitais) — em produção viria de um banco ou API
-        // Para o TCC, usamos coordenadas fixas de Fortaleza como exemplo
-        List<double[]> locaisCriticos = List.of(
-                new double[]{-3.7418, -38.5267},  // Hospital Geral de Fortaleza
-                new double[]{-3.7234, -38.5432},  // UFC Campus do Pici
-                new double[]{-3.7318, -38.5001}   // Escola Estadual exemplo
-        );
-
-        double menorDistancia = locaisCriticos.stream()
-                .mapToDouble(local -> calcularDistanciaKm(lat, lng, local[0], local[1]))
-                .min()
-                .orElse(Double.MAX_VALUE);
-
-        if (menorDistancia <= 0.2) return 20;  // até 200m
-        if (menorDistancia <= 0.5) return 10;  // até 500m
-        if (menorDistancia <= 1.0) return 5;   // até 1km
-        return 0;
-    }
-
-    // Fórmula de Haversine — calcula distância entre dois pontos geográficos
-    private double calcularDistanciaKm(double lat1, double lng1, double lat2, double lng2) {
-        final int RAIO_TERRA_KM = 6371;
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLng = Math.toRadians(lng2 - lng1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        return RAIO_TERRA_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
 }
