@@ -19,4 +19,4 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 ms-geo:
-  url: http://localhost:8085
+  url: http://localhost:8084
