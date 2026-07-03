@@ -6,25 +6,28 @@ Microserviço responsável pela **priorização automática de ocorrências** de
 
 ## Visão Geral
 
-O serviço recebe dados de uma ocorrência e calcula uma pontuação composta com base em quatro critérios ponderados, atribuindo um nível de prioridade que orienta as equipes de fiscalização na tomada de decisão.
+O serviço recebe dados de uma ocorrência e calcula uma pontuação composta com base em três critérios ponderados, atribuindo um nível de prioridade que orienta as equipes de fiscalização na tomada de decisão.
 
 ### Critérios de Pontuação
 
-| Critério | Pontos máximos | Descrição |
+Pontuação máxima total: **80 pts**.
+
+| Critério | Pontos máximos | Regra |
 |---|---|---|
-| Tipo da ocorrência | 40 pts | ESGOTO > BURACO > SEMAFORO > LAMPADA |
-| Quantidade de denúncias | 20 pts | 10+ denúncias = 20 pts |
-| Tempo sem solução | 20 pts | 30+ dias = 20 pts |
-| Proximidade a locais críticos | 20 pts | Escolas/hospitais em até 200m = 20 pts |
+| Tipo da ocorrência | 40 pts | `ESGOTO`=40, `BURACO`=35, `SEMAFORO`=30, `LAMPADA`=15, outro=10 |
+| Quantidade de denúncias | 20 pts | ≥10 denúncias = 20, 5–9 = 10, 2–4 = 5, <2 = 0 |
+| Tempo sem solução | 20 pts | ≥30 dias = 20, 14–29 dias = 10, 7–13 dias = 5, <7 = 0 |
+
+> O critério de proximidade a locais críticos (escolas/hospitais) foi removido do algoritmo. Os campos `latitude` e `longitude` ainda existem no DTO de entrada, mas **não influenciam mais o cálculo do score**.
 
 ### Níveis de Prioridade
 
 | Nível | Pontuação |
 |---|---|
-| `CRITICA` | ≥ 80 |
-| `ALTA` | ≥ 50 |
-| `MEDIA` | ≥ 25 |
-| `BAIXA` | < 25 |
+| `CRITICA` | ≥ 65 |
+| `ALTA` | 40 – 64 |
+| `MEDIA` | 20 – 39 |
+| `BAIXA` | < 20 |
 
 ---
 
@@ -32,8 +35,11 @@ O serviço recebe dados de uma ocorrência e calcula uma pontuação composta co
 
 - **Java 17**
 - **Spring Boot 3.3.6**
-- **Spring Cloud 2025.0.2** (OpenFeign)
+- **Spring Cloud 2023.0.3** (OpenFeign — dependência declarada no `pom.xml`, mas ainda não utilizada por nenhum client no código)
 - **Spring Data JPA** + **PostgreSQL**
+- **springdoc-openapi 2.6.0** (Swagger UI / OpenAPI)
+- **Spring Boot Actuator**
+- **Bean Validation** (`spring-boot-starter-validation`)
 - **Maven**
 - **Lombok**
 
@@ -66,6 +72,16 @@ Variáveis de conexão padrão:
 | Usuário | `admin` |
 | Senha | `password123` |
 
+### CORS
+
+As origens abaixo estão liberadas em `CorsConfig` para todos os endpoints (`/**`):
+
+- `http://localhost:5500`
+- `http://127.0.0.1:5500`
+- `https://somar.up.railway.app`
+
+Métodos permitidos: `GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`. Todos os headers são aceitos e `allowCredentials` está habilitado.
+
 ---
 
 ## Build e Execução
@@ -96,22 +112,24 @@ POST /api/priorizacao/calcular
 **Body:**
 ```json
 {
-  "id": 1,
-  "tipoOcorrencia": "ESGOTO",
-  "quantidadeDenuncias": 5,
-  "dataCriacao": "2026-05-01T10:00:00",
-  "latitude": -3.7318,
-  "longitude": -38.5001
+  "id": 42,
+  "tipoOcorrencia": "BURACO",
+  "quantidadeDenuncias": 7,
+  "dataCriacao": "2026-06-21T10:30:00",
+  "latitude": -23.5505,
+  "longitude": -46.6333
 }
 ```
+
+> `latitude` e `longitude` são aceitos por compatibilidade, mas não são usados no cálculo do score.
 
 **Resposta:**
 ```json
 {
-  "ocorrenciaId": 1,
+  "ocorrenciaId": 42,
   "nivelPrioridade": "ALTA",
-  "scoreCalculado": 65,
-  "justificativa": "..."
+  "scoreCalculado": 50,
+  "justificativa": "Tipo 'BURACO': +35pts. Denúncias (7): +10pts. Tempo sem solução: +5pts. "
 }
 ```
 
@@ -142,14 +160,13 @@ Retorna todas as ocorrências ordenadas por score (decrescente). O parâmetro `n
 
 ```
 src/main/java/com/fiscalizacao/ms_priorizacao/
-├── controller/         # Endpoints REST
-├── service/            # Algoritmo de priorização
+├── controller/         # Endpoints REST (PriorizacaoController)
+├── service/            # Algoritmo de priorização (PriorizacaoService)
 ├── model/              # Entidade JPA (PontuacaoOcorrencia)
 ├── dto/                # Objetos de entrada e saída da API
 ├── enums/              # NivelPrioridade
 ├── repository/         # Acesso ao banco via Spring Data JPA
-├── client/             # Feign client (integração futura com ms-geo)
-└── config/             # Configuração do Feign
+└── config/             # CorsConfig e OpenApiConfig (Swagger)
 ```
 
 ---
@@ -158,9 +175,18 @@ src/main/java/com/fiscalizacao/ms_priorizacao/
 
 | Serviço | Comunicação | Status |
 |---|---|---|
-| `ms-geo` | OpenFeign (REST) | Preparado — `GeoClient` implementado como stub |
+| `ms-geo` | OpenFeign (REST) | Não implementado — a dependência `spring-cloud-starter-openfeign` está no `pom.xml` e existe uma propriedade `ms-geo.url` em `application.yml`, mas não há nenhum `@FeignClient`/`GeoClient` no código-fonte |
 
-A integração com o `ms-geo` está preparada para buscar locais críticos (escolas e hospitais) dinamicamente. Atualmente, o cálculo de proximidade usa coordenadas fixas via fórmula de Haversine.
+O critério de proximidade a locais críticos (escolas/hospitais) foi removido do algoritmo de pontuação, então essa integração não é usada atualmente.
+
+---
+
+## Documentação Interativa (Swagger)
+
+Com a aplicação em execução, a documentação OpenAPI fica disponível em:
+
+- Swagger UI: `http://localhost:8085/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8085/v3/api-docs`
 
 ---
 
